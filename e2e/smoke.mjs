@@ -1,0 +1,440 @@
+/**
+ * PayKit scripted live-fire smoke driver.
+ *
+ * PayKit has NO HTTP API: the SDK is a
+ * TypeScript library and the playground imports the REAL compiled package
+ * (`frontend/package.json` -> "paykit": "file:..") and runs it client-side.
+ * So there is no server to preflight-and-connect-to; the live-fire surface IS
+ * the browser, and this driver is pure Playwright against it.
+ *
+ * What it proves (PayKit's core guarantees, made visible and assertable in the UI):
+ *   1. A signed, untouched webhook is verified and dispatched -> "1 HANDLER RAN".
+ *   2. A payload tampered AFTER signing is rejected -> "INVALID SIG", 0 handlers.
+ *   3. The same webhook event id delivered twice is deduplicated -> "DEDUPED",
+ *      0 handlers on the second delivery; a DIFFERENT id still dispatches, the
+ *      control that keeps the DEDUPED assertion from passing trivially.
+ *   3b. Verification fails closed: an UNSIGNED delivery to a receiver that has
+ *      its secret configured is rejected -> "INVALID SIG" (missing_signature),
+ *      0 handlers — on a fresh event id with a cleared cache, so a fail-open
+ *      engine would visibly dispatch instead.
+ *   4. The same payment fired twice under one idempotency key is served from
+ *      the idempotency cache -> "HIT" with `cache_hit`, the result's own
+ *      `metadata._idempotency`, the provider-call count unmoved, and the SAME
+ *      payment id as >1s earlier (one payment, no double charge).
+ *   5. A different key on the same executor still mints a NEW payment id and
+ *      calls the provider — the positive control for assertion 4.
+ *   6. With the cache dropped, the same key is a "MISS", the provider IS called,
+ *      and the id is STILL the same. That is what a broken cache looks like, so
+ *      it shows that the HIT and the count discriminate where the id cannot.
+ *   7. Reset clears every cached key, not only the one typed in the form.
+ *   8. Zero console errors across the whole run.
+ *
+ * It self-provisions: builds the SDK (so the playground exercises the CURRENT
+ * source, never a stale dist/), spawns `next dev` on :3005, asserts, and tears
+ * the server down in a `finally` (also on failure). Nothing is left running.
+ *
+ *   node e2e/smoke.mjs        # from the repo root; exit 0 = all pass, 1 = any fail
+ *
+ * This drives the Playwright *library* from a plain .mjs — NOT
+ * @playwright/test, whose TS spec loader breaks under Node 23. Playwright is a
+ * devDependency of frontend/, so it is resolved from there even though this
+ * file lives at the repo root.
+ */
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
+import { setTimeout as sleep } from "node:timers/promises";
+import { connect } from "node:net";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(__dirname, "..");
+const FRONTEND = join(ROOT, "frontend");
+const require = createRequire(join(FRONTEND, "package.json"));
+const { chromium } = require("playwright");
+
+const UI_PORT = 3005; // the port `npm run dev` binds in frontend/package.json
+const UI = `http://127.0.0.1:${UI_PORT}`;
+
+// Expected badge text, exactly as `frontend/app/page.tsx` renders it.
+const BADGE_INVALID = "INVALID SIG";
+const BADGE_HANDLERS = "1 HANDLER RAN";
+const BADGE_DEDUPED = "DEDUPED";
+// A second charge must return the FIRST intent. MockProvider mints ids as
+// `mock_pay_${Date.now()}_${rand}` and the table renders id.slice(0, 22) — i.e.
+// through the millisecond timestamp — so waiting this long between the two
+// charges makes id-equality proof that no second payment was created. It does
+// not prove the provider was not called: MockProvider replays a re-sent key's
+// original payment, per the provider idempotency contract, so a broken cache
+// shows the same id. That proof is the provider-call count, which the playground
+// reads from the provider itself, next to the result's own `_idempotency` tag.
+const DUPLICATE_GAP_MS = 1200;
+
+// ---- pass/fail bookkeeping: count checks, print each, exit non-zero on any fail ---
+let pass = 0,
+  fail = 0;
+const ok = (n) => {
+  pass++;
+  console.log(`  ✓ ${n}`);
+};
+const bad = (n, e) => {
+  fail++;
+  console.log(`  ✗ ${n}${e ? " — " + e : ""}`);
+};
+async function check(name, fn) {
+  try {
+    await fn();
+    ok(name);
+  } catch (e) {
+    bad(name, (e && e.message ? e.message : String(e)).split("\n")[0].slice(0, 180));
+  }
+}
+
+// ---- server lifecycle -----------------------------------------------------
+const children = [];
+function launch(label, cmd, args, cwd) {
+  // detached:true -> the server leads its own process group so teardown can
+  // SIGKILL the whole tree (`next dev` spawns compiler children).
+  const child = spawn(cmd, args, { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  child.label = label;
+  child.errtail = [];
+  const keep = (d) => {
+    for (const line of String(d).split("\n")) {
+      if (line.trim()) {
+        child.errtail.push(line);
+        if (child.errtail.length > 30) child.errtail.shift();
+      }
+    }
+  };
+  child.stderr.on("data", keep);
+  child.stdout.on("data", keep);
+  child.on("error", (e) => keep(`spawn error: ${e.message}`));
+  children.push(child);
+  return child;
+}
+function killAll() {
+  for (const c of children) {
+    if (c.pid == null || c.exitCode !== null) continue;
+    try {
+      process.kill(-c.pid, "SIGKILL");
+    } catch {
+      try {
+        c.kill("SIGKILL");
+      } catch {}
+    }
+  }
+}
+for (const sig of ["SIGINT", "SIGTERM"]) {
+  process.on(sig, () => {
+    killAll();
+    process.exit(1);
+  });
+}
+
+/** Run a command to completion; reject on non-zero exit (build gates the run). */
+function run(label, cmd, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const tail = [];
+    const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const keep = (d) => {
+      for (const line of String(d).split("\n")) {
+        if (line.trim()) {
+          tail.push(line);
+          if (tail.length > 20) tail.shift();
+        }
+      }
+    };
+    child.stdout.on("data", keep);
+    child.stderr.on("data", keep);
+    child.on("error", reject);
+    child.on("close", (code) =>
+      code === 0 ? resolve() : reject(new Error(`${label} exited ${code}: ${tail.slice(-6).join(" | ")}`)),
+    );
+  });
+}
+
+function portListening(port) {
+  return new Promise((resolve) => {
+    const s = connect({ host: "127.0.0.1", port }, () => {
+      s.destroy();
+      resolve(true);
+    });
+    s.on("error", () => resolve(false));
+    s.setTimeout(1000, () => {
+      s.destroy();
+      resolve(false);
+    });
+  });
+}
+async function waitUntil(what, fn, timeoutMs, child) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (child && child.exitCode !== null) {
+      throw new Error(`${child.label} exited early (code ${child.exitCode}): ${child.errtail.slice(-6).join(" | ")}`);
+    }
+    try {
+      if (await fn()) return;
+    } catch {}
+    await sleep(400);
+  }
+  throw new Error(`timeout waiting for ${what} after ${timeoutMs}ms${child ? ": " + child.errtail.slice(-6).join(" | ") : ""}`);
+}
+
+/**
+ * Click until a predicate holds. `next dev` serves fully-formed, clickable HTML
+ * before React hydrates, so an early click is silently swallowed — the button
+ * is visible and enabled, and nothing happens. Retrying is the honest fix; a
+ * fixed sleep either flakes or wastes time.
+ */
+async function clickUntil(what, locator, predicate, timeoutMs = 45000) {
+  const start = Date.now();
+  let lastErr;
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await locator.click({ timeout: 5000 });
+      if (await predicate()) return;
+    } catch (e) {
+      lastErr = e;
+    }
+    await sleep(400);
+  }
+  throw new Error(`clickUntil(${what}) never took effect${lastErr ? `: ${lastErr.message.split("\n")[0]}` : ""}`);
+}
+
+let browser;
+const t0 = Date.now();
+try {
+  // Preflight: refuse to run against a stale server on our port — that would be
+  // a false pass on some other checkout (an orphaned dev server can outlive
+  // whatever started it).
+  if (await portListening(UI_PORT)) {
+    throw new Error(`port ${UI_PORT} (frontend) already in use — stop the stale process and re-run`);
+  }
+
+  // Build FIRST: the playground's "paykit": "file:.." dependency resolves to
+  // dist/, so an unbuilt or stale dist would silently test some other build.
+  console.log("Building SDK (dist/ is what the playground imports):");
+  await check("npm run build -> dist/", () => run("npm run build", "npm", ["run", "build"], ROOT));
+
+  console.log("Starting playground:");
+  const uiProc = launch("frontend", "npm", ["run", "dev"], FRONTEND);
+  await check("frontend listening (:3005)", () => waitUntil("frontend port", () => portListening(UI_PORT), 90000, uiProc));
+  // `next dev` binds the port before it can serve — a bare port check races the
+  // first compile and yields ERR_EMPTY_RESPONSE. Wait for a real 200.
+  await check("frontend serving HTTP 200", () =>
+    waitUntil(
+      "frontend HTTP 200",
+      async () => (await fetch(UI, { signal: AbortSignal.timeout(5000) })).ok,
+      120000,
+      uiProc,
+    ),
+  );
+
+  // ---- UI live-fire: real browser, real compiled SDK, 0 console errors -----
+  console.log("UI (headless Chromium @ :3005):");
+  browser = await chromium.launch();
+  const page = await (await browser.newContext()).newPage();
+  const consoleErrors = [];
+  page.on("console", (m) => {
+    if (m.type() === "error") consoleErrors.push(m.text());
+  });
+  page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+  await page.goto(UI, { waitUntil: "domcontentloaded", timeout: 90000 });
+  await page.getByText("Interactive SDK Playground").waitFor({ timeout: 90000 });
+
+  await check("playground served by the real SDK (in-browser badge)", async () => {
+    // No API is configured, so the playground must report that it is running
+    // the real package client-side rather than proxying a backend.
+    await page.getByText("In-browser SDK", { exact: true }).waitFor({ timeout: 15000 });
+  });
+
+  // ---- Webhook tab: a tampered payload is never dispatched -----------------
+  const webhookTab = page.getByRole("tab", { name: "Webhooks" });
+  const fireBtn = page.getByRole("button", { name: "Fire webhook" });
+  const clearBtn = page.getByRole("button", { name: "Clear webhook dedup cache" });
+  const tamperBox = page.locator("label", { hasText: "Tamper body after signing" }).locator("input[type=checkbox]");
+  const signBox = page.locator("label", { hasText: "Sign with HMAC-SHA256" }).locator("input[type=checkbox]");
+  const eventIdInput = page.getByLabel("Event ID", { exact: true });
+  // `.p-4` distinguishes a real result card from the `.p-12` "No webhooks fired
+  // yet." placeholder, which is also a `.bg-panel` child of the same column.
+  const resultCards = page.locator("div.lg\\:col-span-2 > div.bg-panel.p-4");
+
+  // The tab click doubles as the hydration gate: once React owns the page, every
+  // later click lands.
+  await check("webhook tab opens (page hydrated)", () =>
+    clickUntil("Webhooks tab", webhookTab, async () => (await webhookTab.getAttribute("aria-selected")) === "true"),
+  );
+  await fireBtn.waitFor({ timeout: 15000 });
+
+  /** Clear the result list, fire once, and return the single resulting card. */
+  const fireOnce = async () => {
+    await clearBtn.click();
+    await waitUntil("results cleared", async () => (await resultCards.count()) === 0, 15000);
+    await fireBtn.click();
+    await waitUntil("webhook result card", async () => (await resultCards.count()) === 1, 15000);
+    return resultCards.first().innerText();
+  };
+
+  await check("happy path: signed webhook verified + dispatched -> 1 HANDLER RAN", async () => {
+    if (await tamperBox.isChecked()) await tamperBox.uncheck();
+    const card = await fireOnce();
+    if (!card.includes(BADGE_HANDLERS)) throw new Error(`card lacks "${BADGE_HANDLERS}": ${card.replace(/\n/g, " | ").slice(0, 140)}`);
+    if (card.includes(BADGE_INVALID)) throw new Error("valid signature rendered INVALID SIG");
+    if (!card.includes("✓ handler called")) throw new Error("handler log line missing — handler did not run");
+  });
+
+  await check("tampered payload rejected -> INVALID SIG, 0 handlers run", async () => {
+    await tamperBox.check();
+    const card = await fireOnce();
+    if (!card.includes(BADGE_INVALID)) throw new Error(`card lacks "${BADGE_INVALID}": ${card.replace(/\n/g, " | ").slice(0, 140)}`);
+    if (/HANDLERS? RAN/.test(card)) throw new Error("tampered payload still dispatched handlers");
+    if (card.includes("✓ handler called")) throw new Error("handler ran on a tampered payload");
+  });
+
+  await check("duplicate event id -> DEDUPED, 0 handlers on the second delivery", async () => {
+    // The webhook half of "duplicate delivery never double-processes": dedup is
+    // keyed on the EVENT ID, so re-firing the same id must run no handlers.
+    if (await tamperBox.isChecked()) await tamperBox.uncheck();
+    const first = await fireOnce(); // clears the dedup cache, then fires once
+    if (!first.includes(BADGE_HANDLERS)) throw new Error(`first delivery not dispatched: ${first.replace(/\n/g, " | ").slice(0, 140)}`);
+    await fireBtn.click(); // same event id, NO cache clear -> duplicate delivery
+    await waitUntil("second webhook card", async () => (await resultCards.count()) === 2, 15000);
+    const dup = await resultCards.first().innerText();
+    if (!dup.includes(BADGE_DEDUPED)) throw new Error(`second delivery lacks "${BADGE_DEDUPED}": ${dup.replace(/\n/g, " | ").slice(0, 140)}`);
+    if (/HANDLERS? RAN/.test(dup)) throw new Error("duplicate delivery still dispatched handlers");
+    if (dup.includes("✓ handler called")) throw new Error("handler ran on a duplicate delivery");
+    // Control: without this, DEDUPED above could pass for the trivial reason
+    // "every fire after the first is deduped". A NEW id must dispatch normally.
+    await eventIdInput.fill("evt_demo_002");
+    await fireBtn.click();
+    await waitUntil("third webhook card", async () => (await resultCards.count()) === 3, 15000);
+    const fresh = await resultCards.first().innerText();
+    if (!fresh.includes(BADGE_HANDLERS)) throw new Error(`a new event id was not dispatched: ${fresh.replace(/\n/g, " | ").slice(0, 140)}`);
+  });
+
+  await check("unsigned delivery rejected (fail closed) -> INVALID SIG missing_signature, 0 handlers", async () => {
+    // The receiver always holds its secret; only the SENDER skips signing.
+    // fireOnce clears the dedup cache and the id is new, so an engine that
+    // failed open would dispatch ("1 HANDLER RAN") rather than dedupe.
+    if (await tamperBox.isChecked()) await tamperBox.uncheck();
+    await eventIdInput.fill("evt_unsigned_001");
+    await signBox.uncheck();
+    try {
+      const card = await fireOnce();
+      if (!card.includes(BADGE_INVALID)) throw new Error(`card lacks "${BADGE_INVALID}": ${card.replace(/\n/g, " | ").slice(0, 140)}`);
+      if (!card.includes("missing_signature")) throw new Error(`rejection reason is not missing_signature: ${card.replace(/\n/g, " | ").slice(0, 140)}`);
+      if (/HANDLERS? RAN/.test(card)) throw new Error("unsigned delivery dispatched handlers");
+      if (card.includes("✓ handler called")) throw new Error("handler ran on an unsigned delivery");
+    } finally {
+      await signBox.check();
+    }
+  });
+
+  // ---- Payment tab: one idempotency key is one charge ---------------------
+  const paymentTab = page.getByRole("tab", { name: "Idempotent Payments" });
+  const keyInput = page.getByLabel("Idempotency key");
+  const chargeBtn = page.getByRole("button", { name: "Charge card" });
+  const resetBtn = page.getByRole("button", { name: "Reset provider and idempotency cache" });
+  const dropCacheBtn = page.getByRole("button", { name: "Drop idempotency cache" });
+  const providerCalls = async () => (await page.getByLabel("Provider calls").innerText()).trim();
+  const rows = page.locator("tbody tr");
+  // Row shape: [id, key, status, amount, cache, provider] — newest row is prepended.
+  const rowCells = async (i) => {
+    const tds = rows.nth(i).locator("td");
+    const n = await tds.count();
+    const out = [];
+    for (let c = 0; c < n; c++) out.push((await tds.nth(c).innerText()).trim());
+    return out;
+  };
+  const chargeOnce = async (key, expectRows) => {
+    await keyInput.fill(key);
+    await chargeBtn.click();
+    await waitUntil(`payment row #${expectRows}`, async () => (await rows.count()) === expectRows, 15000);
+    return rowCells(0);
+  };
+
+  await check("payments tab opens", () =>
+    clickUntil("Idempotent Payments tab", paymentTab, async () => (await paymentTab.getAttribute("aria-selected")) === "true"),
+  );
+  await chargeBtn.waitFor({ timeout: 15000 });
+  await resetBtn.click();
+  await waitUntil("payment table cleared", async () => (await rows.count()) === 0, 15000);
+
+  let firstId = null;
+  await check("first charge succeeds, is a MISS, and calls the provider once", async () => {
+    if ((await providerCalls()) !== "0") throw new Error(`provider calls ${await providerCalls()} after reset, expected 0`);
+    const [id, key, status, , cache, provider] = await chargeOnce("order_smoke_dup", 1);
+    if (key !== "order_smoke_dup") throw new Error(`row key ${key}`);
+    if (status !== "succeeded") throw new Error(`status ${status}`);
+    if (cache !== "MISS") throw new Error(`cache column ${cache}, expected MISS`);
+    if (provider !== "+1") throw new Error(`provider column ${provider}, expected +1`);
+    if ((await providerCalls()) !== "1") throw new Error(`provider calls ${await providerCalls()}, expected 1`);
+    firstId = id;
+  });
+
+  await check("duplicate charge on the same key -> HIT from _idempotency, provider NOT called, same payment id", async () => {
+    // Wait past a millisecond boundary first: MockProvider stamps Date.now()
+    // into the id, so an id identical to one minted >1s ago is the first
+    // payment. The tag says the executor's store served it; the unmoved count
+    // says the provider was not called.
+    await sleep(DUPLICATE_GAP_MS);
+    const [id, key, status, , cache, provider] = await chargeOnce("order_smoke_dup", 2);
+    if (key !== "order_smoke_dup") throw new Error(`row key ${key}`);
+    if (status !== "succeeded") throw new Error(`status ${status}`);
+    if (!/\bHIT\b/.test(cache) || !cache.includes("cache_hit")) throw new Error(`cache column ${cache}, expected HIT with cache_hit`);
+    if (provider !== "+0") throw new Error(`provider column ${provider}, expected +0: the provider was called`);
+    if ((await providerCalls()) !== "1") throw new Error(`provider calls ${await providerCalls()}, expected 1`);
+    if (id !== firstId) throw new Error(`payment id changed ${firstId} -> ${id}: the duplicate was charged again`);
+  });
+
+  await check("control: a DIFFERENT key does mint a new payment id", async () => {
+    // Without this, id-equality above could pass for a trivial reason (e.g. the
+    // UI rendering a constant). A fresh key must produce a different id.
+    const [id, , status, , cache, provider] = await chargeOnce("order_smoke_other", 3);
+    if (status !== "succeeded") throw new Error(`status ${status}`);
+    if (cache !== "MISS") throw new Error(`cache column ${cache}, expected MISS`);
+    if (provider !== "+1") throw new Error(`provider column ${provider}, expected +1`);
+    if ((await providerCalls()) !== "2") throw new Error(`provider calls ${await providerCalls()}, expected 2`);
+    if (id === firstId) throw new Error(`new key reused the cached id ${id} — id is not discriminating`);
+  });
+
+  await check("tamper: with the cache dropped the id still matches, but the HIT is gone and the provider IS called", async () => {
+    // What a broken executor cache looks like. The id cannot tell (MockProvider
+    // replays it), so this is the check that the two witnesses above can fail.
+    await dropCacheBtn.click();
+    const [id, , status, , cache, provider] = await chargeOnce("order_smoke_dup", 4);
+    if (status !== "succeeded") throw new Error(`status ${status}`);
+    if (id !== firstId) throw new Error(`provider did not replay the key: ${firstId} -> ${id}`);
+    if (cache !== "MISS") throw new Error(`cache column ${cache}, expected MISS: nothing was cached`);
+    if (provider !== "+1") throw new Error(`provider column ${provider}, expected +1`);
+    if ((await providerCalls()) !== "3") throw new Error(`provider calls ${await providerCalls()}, expected 3`);
+  });
+
+  await check("reset clears every cached key, not only the one typed in the form", async () => {
+    await keyInput.fill("order_smoke_other"); // a cached key, and not the one charged next
+    await resetBtn.click();
+    await waitUntil("payment table cleared", async () => (await rows.count()) === 0, 15000);
+    if ((await providerCalls()) !== "0") throw new Error(`provider calls ${await providerCalls()} after reset, expected 0`);
+    const [id, , , , cache, provider] = await chargeOnce("order_smoke_dup", 1);
+    if (cache !== "MISS") throw new Error(`cache column ${cache}: reset left order_smoke_dup cached`);
+    if (provider !== "+1") throw new Error(`provider column ${provider}, expected +1`);
+    if (id === firstId) throw new Error(`reset left the provider's payment ${id} behind`);
+  });
+
+  await check("0 console errors", () => {
+    if (consoleErrors.length) throw new Error(`${consoleErrors.length}: ${consoleErrors.slice(0, 3).join(" | ")}`);
+  });
+} catch (e) {
+  fail++;
+  console.log(`\n✗ FATAL — ${e && e.message ? e.message : String(e)}`);
+} finally {
+  if (browser) {
+    try {
+      await browser.close();
+    } catch {}
+  }
+  killAll();
+}
+
+console.log(`\n${pass} passed, ${fail} failed  (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
+process.exit(fail === 0 ? 0 : 1);

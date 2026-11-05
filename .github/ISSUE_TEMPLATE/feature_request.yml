@@ -1,0 +1,70 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for PayKit
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement! Please describe the problem you're
+        trying to solve so we can evaluate the best way to address it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem are you facing? Why is the current behavior insufficient?
+      placeholder: I need to reconcile against Plaid settlement reports, but ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the feature or API you'd like. Code sketches are welcome.
+      render: typescript
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or alternative approaches you've thought about.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this relate to?
+      options:
+        - Idempotent payments
+        - Webhooks
+        - Reconciliation
+        - Fraud detection
+        - Provider adapters (Stripe / Plaid / Wise)
+        - Demo frontend
+        - Docs / tooling
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that would help us understand the request.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am willing to help implement this feature.
+          required: false

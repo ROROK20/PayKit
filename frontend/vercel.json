@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "buildCommand": "sh scripts/vercel-build.sh",
+  "installCommand": "echo 'install handled in buildCommand (SDK dist/ must build first)'"
+}

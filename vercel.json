@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo skip",
+  "buildCommand": "echo '' && echo '==============================================================' && echo ' Wrong Root Directory: this repo root is the paykit SDK.' && echo ' The web app lives in frontend/.' && echo '' && echo ' Fix (20 seconds): Vercel Project -> Settings ->' && echo ' Build & Deployment -> Root Directory -> set to: frontend' && echo ' Save, then Deployments -> Redeploy.' && echo '==============================================================' && echo '' && exit 1"
+}

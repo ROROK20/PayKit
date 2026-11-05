@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["18.x", "20.x"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      # CONTRIBUTING.md and README.md both call lint a required merge gate.
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test:coverage
+
+      # The jest suite runs TypeScript sources as CommonJS; only the built
+      # package shows how real consumers load it. test:dist runs a CJS and an
+      # ESM consumer under plain Node against dist/ (on every matrix Node).
+      - name: Build and test the built package (CJS + ESM consumers)
+        run: npm run build && npm run test:dist
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          fail_ci_if_error: false
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      - name: Verify dist exists
+        run: ls dist/
+      - name: Test the built package (CJS + ESM consumers)
+        run: npm run test:dist
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      # The playground depends on the SDK as `paykit: file:..` and imports its
+      # built dist/, which is not in git. A root `npm ci` installs the SDK's
+      # toolchain and runs its `prepare` script (the build); without it,
+      # `next build` cannot resolve `paykit`.
+      - name: Install and build the SDK
+        working-directory: .
+        run: npm ci
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint --if-present
+      - name: Build
+        run: npm run build

@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0e1a;
+}
+
+* {
+  border-color: rgb(28 37 64);
+}
+
+body {
+  background: linear-gradient(135deg, #0a0e1a 0%, #0d1424 100%);
+  color: #e5e7eb;
+  min-height: 100vh;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.glow {
+  box-shadow: 0 0 40px -10px rgba(59, 130, 246, 0.3);
+}
+
+.metric-card {
+  background: linear-gradient(180deg, #0f1525 0%, #0a0f1f 100%);
+  border: 1px solid rgb(28 37 64);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.metric-card:hover {
+  border-color: rgb(59 130 246 / 0.5);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0e1a;
+}
+::-webkit-scrollbar-thumb {
+  background: #1c2540;
+  border-radius: 3px;
+}

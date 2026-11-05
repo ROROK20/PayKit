@@ -1,0 +1,28 @@
+# PayKit — one-command playground demo: the real SDK classes against a mock provider.
+#
+#   docker compose up
+#
+# Brings up the Next.js playground on http://localhost:3005. The playground
+# imports and runs the REAL paykit SDK (MockProvider, IdempotentPaymentExecutor,
+# FraudDetector) directly in the browser, in three tabs: payments, webhooks and
+# fraud. Reconciliation has no tab. There is no separate backend service to run,
+# and none ships in this repository.
+#
+# NEXT_PUBLIC_API_URL (optional) points the playground at a backend YOU run
+# that serves GET /health and POST /fraud/check (see frontend/lib/api.ts).
+# Next.js bakes NEXT_PUBLIC_* values into the bundle at BUILD time, so it is
+# a build argument here, not a runtime environment variable:
+#   NEXT_PUBLIC_API_URL=https://api.example.com docker compose up --build
+# Unset (the default), the playground runs the SDK in the browser.
+services:
+  frontend:
+    build:
+      # Build context is the repo root so the frontend's `file:..` dependency
+      # on the paykit SDK resolves and dist/ can be built in-image.
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    ports:
+      - "3005:3005"
+    restart: unless-stopped

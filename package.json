@@ -1,0 +1,75 @@
+{
+  "name": "paykit",
+  "version": "0.1.0",
+  "description": "Open-source TypeScript payments SDK: idempotent payments, fail-closed webhook verification, reconciliation and fraud scoring, with a Stripe adapter and an in-memory mock provider.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts --watch",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:dist": "node scripts/test-dist.mjs",
+    "capture": "node scripts/capture-images.mjs",
+    "example": "tsup examples/basic_payment.ts --format cjs --out-dir node_modules/.cache/paykit-example --silent && node node_modules/.cache/paykit-example/basic_payment.js",
+    "lint": "eslint src tests --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "keywords": [
+    "fintech", "payments", "stripe", "webhooks",
+    "reconciliation", "idempotency", "sdk", "typescript"
+  ],
+  "author": "Rohan Khiani <rohan.s.khiani.vora@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ROROK20/PayKit"
+  },
+  "bugs": {
+    "url": "https://github.com/ROROK20/PayKit/issues"
+  },
+  "homepage": "https://github.com/ROROK20/PayKit",
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0",
+    "stripe": "22.6.2",
+    "ts-jest": "^29.1.2",
+    "tsup": "^8.0.2",
+    "typescript": "^5.3.3"
+  },
+  "peerDependencies": {
+    "stripe": ">=14.0.0"
+  },
+  "peerDependenciesMeta": {
+    "stripe": { "optional": true }
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.ts"],
+    "moduleNameMapper": { "^paykit$": "<rootDir>/src/index.ts" },
+    "collectCoverageFrom": ["src/**/*.ts", "!src/index.ts"],
+    "coverageThreshold": {
+      "global": { "branches": 70, "functions": 80, "lines": 80 }
+    }
+  }
+}

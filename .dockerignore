@@ -1,0 +1,39 @@
+# Docker build context is the repo ROOT (see docker-compose.yml + frontend/Dockerfile).
+# Keep the context small and reproducible: the image builds its own dependencies
+# and artifacts via `npm ci` / `npm run build`, so host-side installs and build
+# output must never be shipped into the context (stale, wrong-platform, huge).
+
+# Dependencies (reinstalled in-image with npm ci)
+node_modules
+frontend/node_modules
+
+# Build output (rebuilt in-image)
+dist
+frontend/.next
+frontend/out
+*.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+
+# Test / coverage artifacts
+coverage
+
+# VCS + editor + OS cruft
+.git
+.gitignore
+.github
+.DS_Store
+*.log
+
+# Secrets and local env (belt-and-suspenders — these are also git-ignored)
+.env
+.env.*
+!.env.example
+
+# Docs screenshots and other non-runtime assets not needed to build the app
+docs/screenshot.png
+
+# Docker meta
+Dockerfile
+frontend/Dockerfile
+docker-compose.yml
+.dockerignore
