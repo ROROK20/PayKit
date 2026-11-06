@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
+import { Familjen_Grotesk, Martian_Mono } from "next/font/google";
 import "./globals.css";
+
+// Self-hosted at build time. Martian Mono keeps its width axis: wide for the
+// claim in the band, condensed for wire data and the trace log.
+const martianMono = Martian_Mono({ subsets: ["latin"], axes: ["wdth"], variable: "--font-mono", display: "swap" });
+const familjenGrotesk = Familjen_Grotesk({ subsets: ["latin"], variable: "--font-prose", display: "swap" });
 
 /**
  * The public origin for absolute OG/Twitter URLs: NEXT_PUBLIC_SITE_URL, else
@@ -15,7 +21,7 @@ const siteUrl = configuredSiteUrl ?? (process.env.NODE_ENV === "production" ? un
 export const metadata: Metadata = {
   ...(siteUrl ? { metadataBase: new URL(siteUrl) } : {}),
   title: {
-    default: "PayKit — Open-source TypeScript payments SDK",
+    default: "PayKit: open-source TypeScript payments SDK",
     template: "%s · PayKit",
   },
   description:
@@ -36,9 +42,9 @@ export const metadata: Metadata = {
     icon: "/icon.svg",
   },
   openGraph: {
-    title: "PayKit — Open-source TypeScript payments SDK",
+    title: "PayKit: open-source TypeScript payments SDK",
     description:
-      "Idempotent payments, HMAC webhooks and fraud detection — the real TypeScript SDK, runnable in your browser",
+      "Idempotent payments, HMAC webhooks and fraud detection: the real TypeScript SDK, runnable in your browser",
     url: "https://github.com/ROROK20/PayKit",
     siteName: "PayKit",
     type: "website",
@@ -46,17 +52,17 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "PayKit — Open-source TypeScript payments SDK",
+    title: "PayKit: open-source TypeScript payments SDK",
     description:
-      "Idempotent payments, HMAC webhooks and fraud detection — the real TypeScript SDK, runnable in your browser",
+      "Idempotent payments, HMAC webhooks and fraud detection: the real TypeScript SDK, runnable in your browser",
     ...(siteUrl ? { images: ["/og.png"] } : {}),
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="font-mono antialiased">{children}</body>
+    <html lang="en" className={`${martianMono.variable} ${familjenGrotesk.variable}`}>
+      <body className="font-sans antialiased">{children}</body>
     </html>
   );
 }

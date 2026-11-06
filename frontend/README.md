@@ -26,7 +26,10 @@ the SDK's `prepare` script (`npm run build`) through that link, so
   `metadata._idempotency`, and the provider-call count does not move
 - Drop the idempotency cache and charge again → a MISS: the provider is called,
   and replays the same payment because it honours the key too
-- Recent payment log with status, cache result and provider calls per charge
+- A request ladder (client, PayKit, provider) that draws each charge from what the
+  call reported: a repeat of a key stops at the cache
+- A trace log with status, cache result and provider calls per charge, with the
+  matching key and payment id highlighted
 - Reset clears the provider and every cached key, not just the one in the form
 
 ### Webhooks Tab
@@ -37,7 +40,7 @@ the SDK's `prepare` script (`npm run build`) through that link, so
 - Untick "Sign" to send an unsigned delivery: the receiver still holds its
   secret, so it is rejected (`missing_signature`) — verification fails closed
 - Event deduplication by ID
-- Handler execution log
+- A receipt per delivery, with the handler log; a tampered payload reads INVALID SIG
 
 ### Fraud Tab
 - Live risk scoring with 7 built-in rules

@@ -255,9 +255,9 @@ try {
   const tamperBox = page.locator("label", { hasText: "Tamper body after signing" }).locator("input[type=checkbox]");
   const signBox = page.locator("label", { hasText: "Sign with HMAC-SHA256" }).locator("input[type=checkbox]");
   const eventIdInput = page.getByLabel("Event ID", { exact: true });
-  // `.p-4` distinguishes a real result card from the `.p-12` "No webhooks fired
-  // yet." placeholder, which is also a `.bg-panel` child of the same column.
-  const resultCards = page.locator("div.lg\\:col-span-2 > div.bg-panel.p-4");
+  // One receipt per delivery, newest first; the "No webhooks fired yet."
+  // placeholder is not one.
+  const resultCards = page.getByTestId("webhook-delivery");
 
   // The tab click doubles as the hydration gate: once React owns the page, every
   // later click lands.

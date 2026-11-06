@@ -1,15 +1,15 @@
 {
-  "capturedAt": "2026-11-04",
+  "capturedAt": "2026-11-05",
   "capturedFrom": "production build of the playground (next build, next start) without NEXT_PUBLIC_API_URL: the real SDK in the browser",
-  "frontendSourcesSha256": "6b745f5d0189dc3341053b5e8d3ceaa2fd9554cb74d53a8cd77995e2b43c3c68",
+  "frontendSourcesSha256": "247771eb8f11ff7b7c0cea47ff1871ea47c3899e42f1a9b0c280488ce1a45911",
   "images": {
     "frontend/public/og.png": {
-      "sha256": "83b698af8ce54c83dfac3c93ffe9cd6144fc3250664f40e4cfa5552fd8938eaa",
+      "sha256": "a761b292398e3d889380da70d2a3126929d5693d29a0785a53e7524216024253",
       "viewport": "1200x630 @2x",
       "shows": "landing view, no charges yet"
     },
     "docs/screenshot.png": {
-      "sha256": "83f631742006c84e0430844ab11fd3bc80e04b25befc7396b141f17098c76849",
+      "sha256": "1062ab97e682e80fdef55f7964222ef563e4142234c8defc7db1a91ad8370ba5",
       "viewport": "1440x925 @2x",
       "shows": "two charges with one idempotency key: MISS, then HIT, and one provider call"
     }
