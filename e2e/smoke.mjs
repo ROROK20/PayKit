@@ -27,7 +27,12 @@
  *      and the id is STILL the same. That is what a broken cache looks like, so
  *      it shows that the HIT and the count discriminate where the id cannot.
  *   7. Reset clears every cached key, not only the one typed in the form.
- *   8. Zero console errors across the whole run.
+ *   8. The share card's og:url is this site's own, on the same origin as og:image.
+ *   9. Layout: at 1280px and 1440px the trace log fits its column with no scroll
+ *      hint, and at 1180px the hint shows exactly when the log scrolls; at 360px
+ *      the tab strip fits, the trace log scrolls under a visible hint, and no
+ *      text field or select is under 16px (iOS zooms into those).
+ *  10. Zero console errors across the whole run.
  *
  * It self-provisions: builds the SDK (so the playground exercises the CURRENT
  * source, never a stale dist/), spawns `next dev` on :3005, asserts, and tears
@@ -248,6 +253,16 @@ try {
     await page.getByText("In-browser SDK", { exact: true }).waitFor({ timeout: 15000 });
   });
 
+  await check("the share card's URL is this site's own, as its image is", async () => {
+    const og = await page.evaluate(() => ({
+      url: document.querySelector('meta[property="og:url"]')?.content,
+      image: document.querySelector('meta[property="og:image"]')?.content,
+    }));
+    if (!og.url || !og.image) throw new Error(`og:url ${og.url}, og:image ${og.image}`);
+    if (new URL(og.url).origin !== new URL(og.image).origin)
+      throw new Error(`og:url ${og.url} is not the site of og:image ${og.image}`);
+  });
+
   // ---- Webhook tab: a tampered payload is never dispatched -----------------
   const webhookTab = page.getByRole("tab", { name: "Webhooks" });
   const fireBtn = page.getByRole("button", { name: "Fire webhook" });
@@ -419,6 +434,64 @@ try {
     if (cache !== "MISS") throw new Error(`cache column ${cache}: reset left order_smoke_dup cached`);
     if (provider !== "+1") throw new Error(`provider column ${provider}, expected +1`);
     if (id === firstId) throw new Error(`reset left the provider's payment ${id} behind`);
+  });
+
+  // ---- Layout: desktop and a 360px phone ----------------------------------
+  // The trace log holds rows from the checks above.
+  // The scroll box itself: its <section> is a region with the same name.
+  const traceBox = page.locator('div[role="region"][aria-labelledby="trace-log"]');
+  const scrollHint = page.locator("[data-scroll-hint]");
+  const overflowOf = (locator) => locator.evaluate((el) => el.scrollWidth - el.clientWidth);
+
+  await check("desktop: the trace log fits at 1280px and 1440px; at 1180px the hint shows exactly when it scrolls", async () => {
+    // A HIT row carries the widest cache cell, so the log must hold one while it
+    // is measured: with only MISS rows the old layout fit too.
+    const [, , , , cache] = await chargeOnce("order_smoke_dup", 2);
+    if (!/\bHIT\b/.test(cache)) throw new Error(`expected a HIT row to measure, cache column ${cache}`);
+    for (const width of [1180, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const settled = async () => {
+        const over = await overflowOf(traceBox);
+        const hinted = (await scrollHint.count()) > 0;
+        return hinted === over > 0 && (width < 1280 || over <= 0);
+      };
+      try {
+        await waitUntil(`${width}px trace log`, settled, 5000);
+      } catch {
+        throw new Error(`${width}px: trace log over by ${await overflowOf(traceBox)}px, ${await scrollHint.count()} hint(s)`);
+      }
+    }
+  });
+
+  await check("360px: the tab strip fits the screen", async () => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    const over = await overflowOf(page.getByRole("tablist"));
+    if (over > 0) throw new Error(`tab strip over by ${over}px`);
+  });
+
+  await check("360px: the trace log scrolls sideways under a visible hint", async () => {
+    try {
+      await waitUntil("scroll hint", async () => (await overflowOf(traceBox)) > 0 && (await scrollHint.isVisible()), 5000);
+    } catch {
+      throw new Error(`trace log over by ${await overflowOf(traceBox)}px, hint visible: ${await scrollHint.isVisible()}`);
+    }
+  });
+
+  await check("360px: every text field and select on every tab is at least 16px (no iOS focus zoom)", async () => {
+    for (const label of ["Idempotent Payments", "Webhooks", "Fraud Detection"]) {
+      const tab = page.getByRole("tab", { name: label });
+      await clickUntil(`${label} tab`, tab, async () => (await tab.getAttribute("aria-selected")) === "true");
+      const sizes = await page
+        .locator('[role="tabpanel"] input, [role="tabpanel"] select, [role="tabpanel"] textarea')
+        .evaluateAll((els) =>
+          els
+            .filter((e) => !["checkbox", "radio", "range", "hidden"].includes(e.type))
+            .map((e) => [e.id || e.tagName, parseFloat(getComputedStyle(e).fontSize)]),
+        );
+      if (sizes.length === 0) throw new Error(`${label}: no field found`);
+      const small = sizes.filter(([, px]) => px < 16);
+      if (small.length) throw new Error(`${label}: ${small.map(([id, px]) => `${id} ${px}px`).join(", ")}`);
+    }
   });
 
   await check("0 console errors", () => {

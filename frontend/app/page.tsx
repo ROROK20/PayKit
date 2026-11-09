@@ -337,6 +337,22 @@ function PaymentTab({ executor, provider, store, ledger, setLedger }: {
   const keyCounts = tally(answered, (a) => a.intent.idempotencyKey);
   const idCounts = tally(answered, (a) => a.intent.id);
 
+  // The trace log scrolls sideways when its columns are wider than its box (on
+  // a phone, always). The hint says so only while that is measured to be true.
+  const traceRef = useRef<HTMLDivElement>(null);
+  const [traceScrolls, setTraceScrolls] = useState(false);
+  useEffect(() => {
+    const box = traceRef.current;
+    if (!box) return;
+    const measure = () => setTraceScrolls(box.scrollWidth > box.clientWidth);
+    const watch = new ResizeObserver(measure);
+    watch.observe(box);
+    // The first charge swaps the empty-state line for the table: watch that too.
+    if (box.firstElementChild) watch.observe(box.firstElementChild);
+    measure();
+    return () => watch.disconnect();
+  }, [answered.length]);
+
   return (
     <>
       <div className="bench !border-t-0">
@@ -422,7 +438,12 @@ function PaymentTab({ executor, provider, store, ledger, setLedger }: {
                 <span>Provider calls: <span aria-label="Provider calls" className="font-bold">{ledger.providerCalls}</span></span>
               </div>
             </div>
-            <div className="max-h-96 overflow-auto border-t-[1.5px] border-ink" tabIndex={0} role="region" aria-labelledby="trace-log">
+            {traceScrolls && (
+              <p data-scroll-hint className="mono-tight pb-1.5 text-xs leading-5 text-ink-2">
+                Scroll the log sideways for every column →
+              </p>
+            )}
+            <div ref={traceRef} className="max-h-96 overflow-auto border-t-[1.5px] border-ink" tabIndex={0} role="region" aria-labelledby="trace-log">
               {answered.length === 0 ? (
                 <p className="py-6 text-[0.9375rem]">
                   No charges yet. Click &quot;Charge Card&quot; to start.

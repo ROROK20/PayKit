@@ -45,7 +45,9 @@ export const metadata: Metadata = {
     title: "PayKit: open-source TypeScript payments SDK",
     description:
       "Idempotent payments, HMAC webhooks and fraud detection: the real TypeScript SDK, runnable in your browser",
-    url: "https://github.com/ROROK20/PayKit",
+    // The card's URL is this deployment's, like its image; the repository is
+    // linked from the page. With no site URL there is neither.
+    ...(siteUrl ? { url: siteUrl } : {}),
     siteName: "PayKit",
     type: "website",
     ...(siteUrl ? { images: [{ url: "/og.png", width: 1200, height: 630, alt: "PayKit SDK playground" }] } : {}),

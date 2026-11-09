@@ -130,6 +130,14 @@
     color: var(--paper);
   }
 
+  /* The three labels need about 302px of text: at 5px a side they overflow a
+     360px screen's 328px strip, so phones get 3px. */
+  @media (max-width: 639.98px) {
+    .tab {
+      padding-inline: 0.1875rem;
+    }
+  }
+
   /* ── Controls ── */
   .field-label {
     display: block;
@@ -159,6 +167,13 @@
     font-family: var(--font-mono), ui-monospace, monospace;
     font-stretch: 87.5%;
     font-size: 0.8125rem;
+  }
+
+  /* iOS Safari zooms the page into any field under 16px when it takes focus. */
+  @media (max-width: 639.98px) {
+    .input {
+      font-size: 1rem;
+    }
   }
 
   .input::placeholder {
@@ -471,11 +486,16 @@
     line-height: 1.25rem;
   }
 
+  /* Cells are 6px a side. At 10px a cache hit's row made the seven columns
+     673px, wider than the log's column on a desktop (663px at 1280 and 1440,
+     628px at 1180); at 6px they need about 617px. A key longer than the
+     default can still outgrow the column just above 1180px: the log then
+     scrolls and the hint above it says so. */
   .trace thead th {
     position: sticky;
     top: 0;
     background: var(--paper);
-    padding: 0.375rem 0.625rem;
+    padding: 0.375rem;
     text-align: left;
     font-weight: 700;
     border-bottom: 1.5px solid var(--ink);
@@ -483,7 +503,7 @@
 
   .trace td,
   .trace tbody th {
-    padding: 0.4375rem 0.625rem;
+    padding: 0.4375rem 0.375rem;
     text-align: left;
     font-weight: 400;
     border-bottom: 1px solid var(--rule);
