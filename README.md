@@ -1392,7 +1392,7 @@ setup, code style, branch/PR workflow, and Conventional Commits convention.
 ## Security
 
 Found a vulnerability? **Please do not open a public issue.** Report it privately
-by email to **rohan.s.khiani.vora@gmail.com**. See [**SECURITY.md**](SECURITY.md) for
+by email to **rskv.khiani@gmail.com**. See [**SECURITY.md**](SECURITY.md) for
 supported versions, the disclosure process, and our response timeline (48h
 acknowledgment, 7-day triage).
 

@@ -34,7 +34,7 @@
     "fintech", "payments", "stripe", "webhooks",
     "reconciliation", "idempotency", "sdk", "typescript"
   ],
-  "author": "Rohan Khiani <rohan.s.khiani.vora@gmail.com>",
+  "author": "Rohan Khiani <rskv.khiani@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",

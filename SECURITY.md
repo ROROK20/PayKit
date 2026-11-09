@@ -10,7 +10,7 @@
 ## Reporting a vulnerability
 
 Please do not report vulnerabilities through public issues, pull requests or
-discussions. Email **[rohan.s.khiani.vora@gmail.com](mailto:rohan.s.khiani.vora@gmail.com)**
+discussions. Email **[rskv.khiani@gmail.com](mailto:rskv.khiani@gmail.com)**
 with a description and its impact, steps to reproduce or a proof of concept, and
 the affected version and configuration.
 
