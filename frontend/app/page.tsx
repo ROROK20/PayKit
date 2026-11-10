@@ -285,6 +285,9 @@ function CacheResult({ tag }: { tag?: string }) {
 
 const LADDER_EVENTS = 4;
 
+/** The trace log narrows a long key's cell, but never past this many leading characters (see .trace-key). */
+const KEY_UNBROKEN = 10;
+
 function PaymentTab({ executor, provider, store, ledger, setLedger }: {
   executor: IdempotentPaymentExecutor;
   provider: CountingMockProvider;
@@ -466,7 +469,14 @@ function PaymentTab({ executor, provider, store, ledger, setLedger }: {
                       <tr key={p.seq}>
                         <th scope="row">{p.seq}</th>
                         <td><Matched on={(idCounts.get(p.intent.id) ?? 0) > 1}>{p.intent.id.slice(0, 22)}…</Matched></td>
-                        <td><span className="block max-w-[13rem] truncate" title={p.intent.idempotencyKey}><Matched on={(keyCounts.get(p.intent.idempotencyKey) ?? 0) > 1}>{p.intent.idempotencyKey}</Matched></span></td>
+                        <td>
+                          <span className="trace-key" title={p.intent.idempotencyKey}>
+                            <Matched on={(keyCounts.get(p.intent.idempotencyKey) ?? 0) > 1}>
+                              <span className="whitespace-nowrap">{p.intent.idempotencyKey.slice(0, KEY_UNBROKEN)}</span>
+                              {p.intent.idempotencyKey.slice(KEY_UNBROKEN)}
+                            </Matched>
+                          </span>
+                        </td>
                         <td className={clsx(p.intent.status === "failed" && "font-semibold text-refuse")}>{p.intent.status}</td>
                         <td className="num">{dollars(p.intent.amount.amount)}</td>
                         <td><CacheResult tag={p.intent.metadata?._idempotency} /></td>

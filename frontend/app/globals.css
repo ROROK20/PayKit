@@ -488,9 +488,8 @@
 
   /* Cells are 6px a side. At 10px a cache hit's row made the seven columns
      673px, wider than the log's column on a desktop (663px at 1280 and 1440,
-     628px at 1180); at 6px they need about 617px. A key longer than the
-     default can still outgrow the column just above 1180px: the log then
-     scrolls and the hint above it says so. */
+     628px at 1180); at 6px they need about 617px with the default key. A
+     longer key narrows instead of widening the table: see .trace-key. */
   .trace thead th {
     position: sticky;
     top: 0;
@@ -511,6 +510,23 @@
 
   .trace .num {
     text-align: right;
+  }
+
+  /* The key is the one cell whose length the user sets, up to the 255
+     characters the executor takes. On one line, as wide as the key up to
+     13rem, it ends in an ellipsis where it is cut. It may break between any
+     two characters, so when the other columns need the room it narrows rather
+     than widen the table, and the log fits a desktop column whatever the key.
+     Its first ten characters do not break (page.tsx), so it never narrows past
+     them: a row that cannot fit even so, as on a phone, scrolls under the hint. */
+  .trace-key {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    overflow: hidden;
+    max-width: 13rem;
+    white-space: normal;
+    word-break: break-all;
   }
 
   /* ── Webhook receipts ── */

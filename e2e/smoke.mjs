@@ -28,10 +28,11 @@
  *      it shows that the HIT and the count discriminate where the id cannot.
  *   7. Reset clears every cached key, not only the one typed in the form.
  *   8. The share card's og:url is this site's own, on the same origin as og:image.
- *   9. Layout: at 1280px and 1440px the trace log fits its column with no scroll
- *      hint, and at 1180px the hint shows exactly when the log scrolls; at 360px
- *      the tab strip fits, the trace log scrolls under a visible hint, and no
- *      text field or select is under 16px (iOS zooms into those).
+ *   9. Layout: from 1180px to 1440px the trace log fits its column with no
+ *      scroll hint, even holding the longest key the executor takes (255
+ *      characters) on a cache HIT; at 360px the tab strip fits, the trace log
+ *      scrolls under a visible hint, and no text field or select is under
+ *      16px (iOS zooms into those).
  *  10. Zero console errors across the whole run.
  *
  * It self-provisions: builds the SDK (so the playground exercises the CURRENT
@@ -442,19 +443,20 @@ try {
   const traceBox = page.locator('div[role="region"][aria-labelledby="trace-log"]');
   const scrollHint = page.locator("[data-scroll-hint]");
   const overflowOf = (locator) => locator.evaluate((el) => el.scrollWidth - el.clientWidth);
+  // The longest key the executor accepts (MAX_IDEMPOTENCY_KEY_LENGTH).
+  const LONGEST_KEY = ("order_" + "0123456789abcdefghijklmnopqrstuvwxyz".repeat(8)).slice(0, 255);
 
-  await check("desktop: the trace log fits at 1280px and 1440px; at 1180px the hint shows exactly when it scrolls", async () => {
-    // A HIT row carries the widest cache cell, so the log must hold one while it
-    // is measured: with only MISS rows the old layout fit too.
-    const [, , , , cache] = await chargeOnce("order_smoke_dup", 2);
+  await check("desktop: with the longest key on a HIT, the trace log fits from 1180px to 1440px and no hint shows", async () => {
+    // A HIT row carries the widest cache cell, and the key is the one column
+    // whose width the user sets: hold both while measuring. At 13rem the old
+    // key cell made this table 71px too wide at 1440px and 106px at 1180px.
+    await chargeOnce(LONGEST_KEY, 2);
+    const [, key, , , cache] = await chargeOnce(LONGEST_KEY, 3);
+    if (key !== LONGEST_KEY) throw new Error(`the key cell does not hold the whole key (${key.length} characters)`);
     if (!/\bHIT\b/.test(cache)) throw new Error(`expected a HIT row to measure, cache column ${cache}`);
-    for (const width of [1180, 1280, 1440]) {
+    for (const width of [1180, 1181, 1190, 1200, 1205, 1230, 1280, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      const settled = async () => {
-        const over = await overflowOf(traceBox);
-        const hinted = (await scrollHint.count()) > 0;
-        return hinted === over > 0 && (width < 1280 || over <= 0);
-      };
+      const settled = async () => (await overflowOf(traceBox)) <= 0 && (await scrollHint.count()) === 0;
       try {
         await waitUntil(`${width}px trace log`, settled, 5000);
       } catch {
