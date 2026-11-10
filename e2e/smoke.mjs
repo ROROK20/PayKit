@@ -30,9 +30,10 @@
  *   8. The share card's og:url is this site's own, on the same origin as og:image.
  *   9. Layout: from 1180px to 1440px the trace log fits its column with no
  *      scroll hint, even holding the longest key the executor takes (255
- *      characters) on a cache HIT; at 360px the tab strip fits, the trace log
- *      scrolls under a visible hint, and no text field or select is under
- *      16px (iOS zooms into those).
+ *      characters) on a cache HIT; at 320px and 360px the tab strip fits and
+ *      every tab is at least 44px tall; at 360px the trace log scrolls under a
+ *      visible hint, and no text field or select is under 16px (iOS zooms
+ *      into those).
  *  10. Zero console errors across the whole run.
  *
  * It self-provisions: builds the SDK (so the playground exercises the CURRENT
@@ -465,10 +466,14 @@ try {
     }
   });
 
-  await check("360px: the tab strip fits the screen", async () => {
-    await page.setViewportSize({ width: 360, height: 740 });
-    const over = await overflowOf(page.getByRole("tablist"));
-    if (over > 0) throw new Error(`tab strip over by ${over}px`);
+  await check("320px and 360px: the tab strip fits the screen and every tab is at least 44px tall", async () => {
+    for (const width of [320, 360]) {
+      await page.setViewportSize({ width, height: 740 });
+      const over = await overflowOf(page.getByRole("tablist"));
+      if (over > 0) throw new Error(`${width}px: tab strip over by ${over}px`);
+      const heights = await page.getByRole("tab").evaluateAll((tabs) => tabs.map((t) => t.getBoundingClientRect().height));
+      if (heights.some((h) => h < 44)) throw new Error(`${width}px: tab heights ${heights.map(Math.round).join(", ")}px`);
+    }
   });
 
   await check("360px: the trace log scrolls sideways under a visible hint", async () => {

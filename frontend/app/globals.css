@@ -130,11 +130,24 @@
     color: var(--paper);
   }
 
-  /* The three labels need about 302px of text: at 5px a side they overflow a
-     360px screen's 328px strip, so phones get 3px. */
+  /* The three labels need about 302px of text on one line: at 5px a side they
+     overflow a 360px screen's 328px strip, so phones get 3px, and a 320px
+     screen's 288px strip is narrower than the text itself. So below sm a label
+     may wrap at its space: where the strip is too narrow, a tab shrinks toward
+     its longest word and its label takes two lines; where the labels fit, they
+     stay on one. One line or two, a tab is at least 44px tall to tap. */
   @media (max-width: 639.98px) {
     .tab {
-      padding-inline: 0.1875rem;
+      min-height: 2.75rem;
+      padding: 0.375rem 0.1875rem;
+      line-height: 1rem;
+      white-space: normal;
+    }
+  }
+
+  @media (pointer: coarse) {
+    .tab {
+      min-height: 2.75rem;
     }
   }
 
