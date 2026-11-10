@@ -37,7 +37,7 @@ console.log(first.id === retry.id); // true
 <p align="center">
   <img src="docs/screenshot.png" alt="PayKit playground, production build running the real SDK in the browser: two charges with one idempotency key — the second is a cache HIT, and the provider-call count stays at 1" width="100%">
   <br>
-  <em>The playground's payments tab: the same idempotency key returns a cache <strong>HIT</strong> and the mock provider is called once, not twice. Captured 2026-11-09 from the production build by <code>npm run capture</code>.</em>
+  <em>The playground's payments tab: the same idempotency key returns a cache <strong>HIT</strong> and the mock provider is called once, not twice. Captured 2026-11-10 from the production build by <code>npm run capture</code>.</em>
 </p>
 
 ---
