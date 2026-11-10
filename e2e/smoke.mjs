@@ -32,8 +32,10 @@
  *      scroll hint, even holding the longest key the executor takes (255
  *      characters) on a cache HIT; at 320px and 360px the tab strip fits and
  *      every tab is at least 44px tall; at 360px the trace log scrolls under a
- *      visible hint, and no text field or select is under 16px (iOS zooms
- *      into those).
+ *      visible hint, and no text field or select is under 16px (iOS zooms into
+ *      those). On a touch screen at 844px and 1024px no field is under 16px
+ *      either, the event-type select is as wide as its widest option, and
+ *      nothing scrolls sideways.
  *  10. Zero console errors across the whole run.
  *
  * It self-provisions: builds the SDK (so the playground exercises the CURRENT
@@ -438,7 +440,7 @@ try {
     if (id === firstId) throw new Error(`reset left the provider's payment ${id} behind`);
   });
 
-  // ---- Layout: desktop and a 360px phone ----------------------------------
+  // ---- Layout: desktop, phones, touch screens ------------------------------
   // The trace log holds rows from the checks above.
   // The scroll box itself: its <section> is a region with the same name.
   const traceBox = page.locator('div[role="region"][aria-labelledby="trace-log"]');
@@ -484,20 +486,63 @@ try {
     }
   });
 
+  const TABS = ["Idempotent Payments", "Webhooks", "Fraud Detection"];
+  /** Open a tab, then throw if any text field or select on it is under 16px (iOS zooms into those on focus). */
+  const assertFieldsAtLeast16px = async (p, label, where) => {
+    const tab = p.getByRole("tab", { name: label });
+    await clickUntil(`${where} ${label} tab`, tab, async () => (await tab.getAttribute("aria-selected")) === "true");
+    const sizes = await p
+      .locator('[role="tabpanel"] input, [role="tabpanel"] select, [role="tabpanel"] textarea')
+      .evaluateAll((els) =>
+        els
+          .filter((e) => !["checkbox", "radio", "range", "hidden"].includes(e.type))
+          .map((e) => [e.id || e.tagName, parseFloat(getComputedStyle(e).fontSize)]),
+      );
+    if (sizes.length === 0) throw new Error(`${where} ${label}: no field found`);
+    const small = sizes.filter(([, px]) => px < 16);
+    if (small.length) throw new Error(`${where} ${label}: ${small.map(([id, px]) => `${id} ${px}px`).join(", ")}`);
+  };
+
   await check("360px: every text field and select on every tab is at least 16px (no iOS focus zoom)", async () => {
-    for (const label of ["Idempotent Payments", "Webhooks", "Fraud Detection"]) {
-      const tab = page.getByRole("tab", { name: label });
-      await clickUntil(`${label} tab`, tab, async () => (await tab.getAttribute("aria-selected")) === "true");
-      const sizes = await page
-        .locator('[role="tabpanel"] input, [role="tabpanel"] select, [role="tabpanel"] textarea')
-        .evaluateAll((els) =>
-          els
-            .filter((e) => !["checkbox", "radio", "range", "hidden"].includes(e.type))
-            .map((e) => [e.id || e.tagName, parseFloat(getComputedStyle(e).fontSize)]),
-        );
-      if (sizes.length === 0) throw new Error(`${label}: no field found`);
-      const small = sizes.filter(([, px]) => px < 16);
-      if (small.length) throw new Error(`${label}: ${small.map(([id, px]) => `${id} ${px}px`).join(", ")}`);
+    for (const label of TABS) await assertFieldsAtLeast16px(page, label, "360px");
+  });
+
+  await check("touch screen at 844px and 1024px: fields are 16px, the event-type select fits its widest option, nothing scrolls sideways", async () => {
+    // Safari zooms into a field under 16px on any touch screen, not only below
+    // 640px: an iPhone held sideways is 844px wide, an iPad 1024px. At 16px a
+    // select laid out for 13px would cut off the event type it shows.
+    for (const [width, height] of [[844, 390], [1024, 1366]]) {
+      const where = `touch ${width}px`;
+      const touch = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
+      try {
+        const tp = await touch.newPage();
+        tp.on("console", (m) => {
+          if (m.type() === "error") consoleErrors.push(m.text());
+        });
+        tp.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+        await tp.goto(UI, { waitUntil: "domcontentloaded", timeout: 90000 });
+        if (!(await tp.evaluate(() => matchMedia("(pointer: coarse)").matches))) throw new Error(`${where}: the context is not a coarse pointer`);
+        for (const label of TABS) {
+          await assertFieldsAtLeast16px(tp, label, where);
+          const sideways = await tp.evaluate(() => document.scrollingElement.scrollWidth - document.scrollingElement.clientWidth);
+          if (sideways > 0) throw new Error(`${where} ${label}: the page scrolls sideways by ${sideways}px`);
+        }
+        await assertFieldsAtLeast16px(tp, "Webhooks", where);
+        // A select's max-content width is the engine's own measure of its widest option.
+        const select = await tp.locator("#webhook-type").evaluate((el) => {
+          const box = el.getBoundingClientRect().width;
+          const was = el.style.width;
+          el.style.width = "max-content";
+          const widest = el.getBoundingClientRect().width;
+          el.style.width = was;
+          return { box, widest };
+        });
+        if (select.box + 0.5 < select.widest) {
+          throw new Error(`${where}: event-type select is ${Math.round(select.box)}px, its widest option needs ${Math.round(select.widest)}px`);
+        }
+      } finally {
+        await touch.close();
+      }
     }
   });
 

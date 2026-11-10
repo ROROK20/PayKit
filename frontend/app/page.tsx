@@ -805,7 +805,7 @@ function WebhookTab({ engine, deliveries, setDeliveries }: {
     <>
       <div className="bench !border-t-0">
         <form
-          className="wrap grid gap-x-4 gap-y-3 py-4 md:grid-cols-3 min-[1180px]:grid-cols-[17rem_10rem_9rem_minmax(0,1fr)_auto]"
+          className="webhook-form wrap grid gap-x-4 gap-y-3 py-4 md:grid-cols-3 min-[1180px]:grid-cols-[17rem_10rem_9rem_minmax(0,1fr)_auto]"
           onSubmit={(e) => {
             e.preventDefault();
             fire();

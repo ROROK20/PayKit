@@ -182,8 +182,10 @@
     font-size: 0.8125rem;
   }
 
-  /* iOS Safari zooms the page into any field under 16px when it takes focus. */
-  @media (max-width: 639.98px) {
+  /* iOS Safari zooms the page into any field under 16px when it takes focus,
+     and not only below sm: an iPhone held sideways is 844px wide, an iPad
+     wider. So a touch screen gets 16px fields at any width; a mouse keeps 13px. */
+  @media (max-width: 639.98px), (pointer: coarse) {
     .input {
       font-size: 1rem;
     }
@@ -191,6 +193,23 @@
 
   .input::placeholder {
     color: var(--ink-2);
+  }
+
+  /* At 16px the event-type select's longest option no longer fits a third of
+     the form, nor 17rem past 1180px, and a select cannot be scrolled to read
+     what it holds. So on a touch screen its column is as wide as its options
+     and the text fields share the rest (past 1180px the other columns are
+     page.tsx's). form.webhook-form outranks the grid utilities it replaces. */
+  @media (pointer: coarse) and (min-width: 768px) {
+    form.webhook-form {
+      grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+
+  @media (pointer: coarse) and (min-width: 1180px) {
+    form.webhook-form {
+      grid-template-columns: auto 10rem 9rem minmax(0, 1fr) auto;
+    }
   }
 
   .range {
