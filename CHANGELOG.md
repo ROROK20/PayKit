@@ -8,7 +8,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- **The playground's form fields fit what they hold.** The event-type select is as wide as its widest option at every width (it cut `payment_intent.payment_failed` short from 1180px, and with a mouse at 768px), and in Safari as tall as the other fields (it was 21px). The Description field's default no longer scrolls inside it at 1180px (by 43px on a touch screen).
+- **The playground's form fields fit what they hold.** The event-type select is as wide as its widest option at every width from 360px (it cut `payment_intent.payment_failed` short from 1180px, with a mouse at 768px, and on phones by up to 18px), and in Safari as tall as the other fields (it was 21px). On a phone under 390px the fields use the mono face at its narrowest width so that option fits; under 360px it is still cut short. The Description field's default no longer scrolls inside it at 1180px (by 43px on a touch screen).
 
 ## [0.1.0] — first public release
 

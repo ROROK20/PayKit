@@ -191,6 +191,16 @@
     }
   }
 
+  /* At 16px, payment_intent.payment_failed is wider than the event-type
+     select on a phone under 390px. There the fields take Martian Mono at
+     75%, the floor of its width axis, so it fits from 360px. Under 360px
+     (a 320px iPhone SE) the longest event type is still cut short. */
+  @media (max-width: 389.98px) {
+    .input {
+      font-stretch: 75%;
+    }
+  }
+
   .input::placeholder {
     color: var(--ink-2);
   }
@@ -199,12 +209,13 @@
      at 13px, and ignores the padding, min-height and corners above. With
      appearance: none every engine draws it as a field like the others; it is
      still the native select, with the native picker. The arrow is drawn here
-     as two halves of a triangle, in the room the right padding keeps for it. */
+     as two halves of a triangle, in the room the right padding keeps for it
+     (the arrow ends 20px from the edge; 24px leaves it a 4px gap). */
   select.input {
     -webkit-appearance: none;
     appearance: none;
     border-radius: 0;
-    padding-right: 2rem;
+    padding-right: 1.5rem;
     background-image:
       linear-gradient(45deg, transparent 50%, var(--ink) 50%),
       linear-gradient(135deg, var(--ink) 50%, transparent 50%);

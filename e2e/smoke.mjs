@@ -611,10 +611,11 @@ try {
         await ctx.close();
       }
     });
-    await check(`${name}, on a touch screen at 768x1024 and 1180x820: the same, at 16px`, async () => {
-      // An iPad in portrait and an iPad Air held sideways. At 16px the old
-      // description scrolled its default by 6px and 43px in Chromium.
-      for (const [width, height] of [[768, 1024], [1180, 820]]) {
+    await check(`${name}, on a touch screen at 360x800, 375x812, 390x844, 768x1024 and 1180x820: the same, at 16px`, async () => {
+      // Three phones, an iPad in portrait and an iPad Air held sideways. At 16px
+      // the old description scrolled its default by 6px and 43px in Chromium,
+      // and on a phone the select was up to 18px short of payment_intent.payment_failed.
+      for (const [width, height] of [[360, 800], [375, 812], [390, 844], [768, 1024], [1180, 820]]) {
         const where = `${name} touch ${width}px`;
         const ctx = await (await engineBrowser()).newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
         try {
