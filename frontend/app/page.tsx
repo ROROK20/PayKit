@@ -356,11 +356,15 @@ function PaymentTab({ executor, provider, store, ledger, setLedger }: {
     return () => watch.disconnect();
   }, [answered.length]);
 
+  // The three fields share their room 2:3:4, as much as each tends to hold:
+  // an amount, a key, a sentence. Past 1180px the buttons take what they need
+  // first. With fixed 9rem and 13rem columns the description had only what
+  // was left, so at 1180px its own default ran past the box.
   return (
     <>
       <div className="bench !border-t-0">
         <form
-          className="wrap grid gap-x-4 gap-y-3 py-4 md:grid-cols-3 min-[1180px]:grid-cols-[9rem_13rem_minmax(0,1fr)_auto]"
+          className="wrap grid gap-x-4 gap-y-3 py-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(0,4fr)] min-[1180px]:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_minmax(0,4fr)_auto]"
           onSubmit={(e) => {
             e.preventDefault();
             handleCharge();
@@ -801,11 +805,15 @@ function WebhookTab({ engine, deliveries, setDeliveries }: {
   const refusals = deliveries.filter((r) => ["invalid_sig", "rejected", "not_acked"].includes(outcomeOf(r))).length;
   const dedupedIds = new Set(deliveries.filter((r) => outcomeOf(r) === "deduped").map((r) => r.eventId));
 
+  // A select cannot be scrolled to read what it holds, so the event type's
+  // column is as wide as its widest option (auto) at any width and font size,
+  // and the text fields share the rest. A third of the form at 768px, or 17rem
+  // past 1180px, cut payment_intent.payment_failed short.
   return (
     <>
       <div className="bench !border-t-0">
         <form
-          className="webhook-form wrap grid gap-x-4 gap-y-3 py-4 md:grid-cols-3 min-[1180px]:grid-cols-[17rem_10rem_9rem_minmax(0,1fr)_auto]"
+          className="wrap grid gap-x-4 gap-y-3 py-4 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] min-[1180px]:grid-cols-[auto_10rem_9rem_minmax(0,1fr)_auto]"
           onSubmit={(e) => {
             e.preventDefault();
             fire();

@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The playground's form fields fit what they hold.** The event-type select is as wide as its widest option at every width (it cut `payment_intent.payment_failed` short from 1180px, and with a mouse at 768px), and in Safari as tall as the other fields (it was 21px). The Description field's default no longer scrolls inside it at 1180px (by 43px on a touch screen).
+
 ## [0.1.0] — first public release
 
 2026-11-04. A source release: install from this repository. The package is not on npm.

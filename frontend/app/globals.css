@@ -195,20 +195,34 @@
     color: var(--ink-2);
   }
 
-  /* At 16px the event-type select's longest option no longer fits a third of
-     the form, nor 17rem past 1180px, and a select cannot be scrolled to read
-     what it holds. So on a touch screen its column is as wide as its options
-     and the text fields share the rest (past 1180px the other columns are
-     page.tsx's). form.webhook-form outranks the grid utilities it replaces. */
-  @media (pointer: coarse) and (min-width: 768px) {
-    form.webhook-form {
-      grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
-    }
+  /* WebKit on macOS draws a select as its own rounded menu button, 21px tall
+     at 13px, and ignores the padding, min-height and corners above. With
+     appearance: none every engine draws it as a field like the others; it is
+     still the native select, with the native picker. The arrow is drawn here
+     as two halves of a triangle, in the room the right padding keeps for it. */
+  select.input {
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 0;
+    padding-right: 2rem;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+      linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+    background-position:
+      right 0.9375rem center,
+      right 0.625rem center;
+    background-size: 0.3125rem 0.3125rem;
+    background-repeat: no-repeat;
   }
 
-  @media (pointer: coarse) and (min-width: 1180px) {
-    form.webhook-form {
-      grid-template-columns: auto 10rem 9rem minmax(0, 1fr) auto;
+  /* Forced colours drop author backgrounds, the arrow with them: give the
+     select back its own. */
+  @media (forced-colors: active) {
+    select.input {
+      -webkit-appearance: auto;
+      appearance: auto;
+      padding-right: 0.625rem;
+      background-image: none;
     }
   }
 

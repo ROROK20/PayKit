@@ -36,7 +36,11 @@
  *      those). On a touch screen at 844px and 1024px no field is under 16px
  *      either, the event-type select is as wide as its widest option, and
  *      nothing scrolls sideways.
- *  10. Zero console errors across the whole run.
+ *  10. Form fields, in headless Chromium and WebKit, with a mouse at 768, 900,
+ *      1180 and 1440px and on a touch screen at 768x1024 and 1180x820: on every
+ *      tab the fields are one height, no field's default value scrolls inside
+ *      it, and the event-type select is as wide as its widest option.
+ *  11. Zero console errors across the whole run.
  *
  * It self-provisions: builds the SDK (so the playground exercises the CURRENT
  * source, never a stale dist/), spawns `next dev` on :3005, asserts, and tears
@@ -60,7 +64,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const FRONTEND = join(ROOT, "frontend");
 const require = createRequire(join(FRONTEND, "package.json"));
-const { chromium } = require("playwright");
+const { chromium, webkit } = require("playwright");
 
 const UI_PORT = 3005; // the port `npm run dev` binds in frontend/package.json
 const UI = `http://127.0.0.1:${UI_PORT}`;
@@ -507,6 +511,18 @@ try {
     for (const label of TABS) await assertFieldsAtLeast16px(page, label, "360px");
   });
 
+  /** A fresh playground page in `ctx`, its console watched, its fonts loaded: every field holds its default value. */
+  const openPlayground = async (ctx) => {
+    const p = await ctx.newPage();
+    p.on("console", (m) => {
+      if (m.type() === "error") consoleErrors.push(m.text());
+    });
+    p.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
+    await p.goto(UI, { waitUntil: "domcontentloaded", timeout: 90000 });
+    await p.evaluate(() => document.fonts.ready.then(() => undefined));
+    return p;
+  };
+
   await check("touch screen at 844px and 1024px: fields are 16px, the event-type select fits its widest option, nothing scrolls sideways", async () => {
     // Safari zooms into a field under 16px on any touch screen, not only below
     // 640px: an iPhone held sideways is 844px wide, an iPad 1024px. At 16px a
@@ -515,12 +531,7 @@ try {
       const where = `touch ${width}px`;
       const touch = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
       try {
-        const tp = await touch.newPage();
-        tp.on("console", (m) => {
-          if (m.type() === "error") consoleErrors.push(m.text());
-        });
-        tp.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
-        await tp.goto(UI, { waitUntil: "domcontentloaded", timeout: 90000 });
+        const tp = await openPlayground(touch);
         if (!(await tp.evaluate(() => matchMedia("(pointer: coarse)").matches))) throw new Error(`${where}: the context is not a coarse pointer`);
         for (const label of TABS) {
           await assertFieldsAtLeast16px(tp, label, where);
@@ -545,6 +556,78 @@ try {
       }
     }
   });
+
+  // ---- Form fields in Chromium and WebKit ----------------------------------
+  // WebKit is Safari's engine, on a Mac as on an iPad or iPhone, and it draws a
+  // native select its own way: as a 21px menu button beside 40px text fields.
+  const FIELDS = ["text", "number"].map((t) => `[role="tabpanel"] input[type="${t}"]`).concat('[role="tabpanel"] select').join(", ");
+  /** On every tab, throw unless the fields are one height, no default value scrolls inside its field, and the event-type select holds its widest option. */
+  const assertFieldsFit = async (p, where) => {
+    for (const label of TABS) {
+      const tab = p.getByRole("tab", { name: label });
+      await clickUntil(`${where} ${label} tab`, tab, async () => (await tab.getAttribute("aria-selected")) === "true");
+      const fields = await p.locator(FIELDS).evaluateAll((els) =>
+        els.map((e) => {
+          const { width, height } = e.getBoundingClientRect();
+          // A select's max-content width is the engine's own measure of its widest option.
+          let widest = null;
+          if (e.tagName === "SELECT") {
+            const was = e.style.width;
+            e.style.width = "max-content";
+            widest = e.getBoundingClientRect().width;
+            e.style.width = was;
+          }
+          return { id: e.id, width, height, widest, scrolls: e.tagName === "SELECT" ? 0 : e.scrollWidth - e.clientWidth };
+        }),
+      );
+      if (fields.length === 0) throw new Error(`${where} ${label}: no field found`);
+      const heights = fields.map((f) => f.height);
+      if (Math.max(...heights) - Math.min(...heights) > 0.5) {
+        throw new Error(`${where} ${label}: field heights ${fields.map((f) => `${f.id} ${Math.round(f.height)}px`).join(", ")}`);
+      }
+      const scrolled = fields.filter((f) => f.scrolls > 0);
+      if (scrolled.length) throw new Error(`${where} ${label}: default value scrolls inside ${scrolled.map((f) => `${f.id} by ${f.scrolls}px`).join(", ")}`);
+      for (const f of fields.filter((f) => f.widest !== null && f.width + 0.5 < f.widest)) {
+        throw new Error(`${where} ${label}: ${f.id} is ${Math.round(f.width)}px, its widest option needs ${Math.round(f.widest)}px`);
+      }
+    }
+  };
+
+  for (const [name, engine] of [["Chromium", chromium], ["WebKit", webkit]]) {
+    let launched = null;
+    const engineBrowser = async () => (engine === chromium ? browser : (launched ??= await engine.launch()));
+    await check(`${name}, with a mouse at 768, 900, 1180 and 1440px: on every tab the fields are one height, no default value scrolls, the event-type select holds its widest option`, async () => {
+      // At 768px the select had a third of the form, and from 1180px 17rem:
+      // both cut payment_intent.payment_failed short. At 1180px the description
+      // had what the buttons left, 4px less than its own default.
+      const ctx = await (await engineBrowser()).newContext({ viewport: { width: 768, height: 900 } });
+      try {
+        const p = await openPlayground(ctx);
+        for (const width of [768, 900, 1180, 1440]) {
+          await p.setViewportSize({ width, height: 900 });
+          await assertFieldsFit(p, `${name} ${width}px`);
+        }
+      } finally {
+        await ctx.close();
+      }
+    });
+    await check(`${name}, on a touch screen at 768x1024 and 1180x820: the same, at 16px`, async () => {
+      // An iPad in portrait and an iPad Air held sideways. At 16px the old
+      // description scrolled its default by 6px and 43px in Chromium.
+      for (const [width, height] of [[768, 1024], [1180, 820]]) {
+        const where = `${name} touch ${width}px`;
+        const ctx = await (await engineBrowser()).newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
+        try {
+          const p = await openPlayground(ctx);
+          if (!(await p.evaluate(() => matchMedia("(pointer: coarse)").matches))) throw new Error(`${where}: the context is not a coarse pointer`);
+          await assertFieldsFit(p, where);
+        } finally {
+          await ctx.close();
+        }
+      }
+    });
+    if (launched) await launched.close();
+  }
 
   await check("0 console errors", () => {
     if (consoleErrors.length) throw new Error(`${consoleErrors.length}: ${consoleErrors.slice(0, 3).join(" | ")}`);

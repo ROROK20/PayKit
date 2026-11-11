@@ -50,7 +50,7 @@ console.log(first.id === retry.id); // true
 - **The Stripe adapter is checked against the real stripe-node.** [`tests/stripe_real_sdk.test.ts`](tests/stripe_real_sdk.test.ts) drives stripe-node 22.6.2 through a scripted HTTP transport and checks the request body, headers and error mapping. No socket is opened, so it says nothing about how live Stripe behaves.
 - **Webhook verdicts hold in both engines.** [`tests/browser_webhook_parity.test.ts`](tests/browser_webhook_parity.test.ts) asserts each fail-closed, tamper and replay verdict against the Node engine and the playground's browser engine.
 - **`perfect` cannot coexist with a disagreement it compares.** [`tests/reconciliation.test.ts`](tests/reconciliation.test.ts): the `a false all-clear is never reported` block, and `seeded fuzz: perfect never coexists with any disagreement the engine claims to compare`.
-- **The docs and the package run as written.** [`tests/docs_examples.test.ts`](tests/docs_examples.test.ts) runs the README's fraud and reconciliation examples, compares every printed value, and compiles every TypeScript snippet under strict mode. `npm run build && npm run test:dist` loads the built package as CJS and ESM under plain Node, and `node e2e/smoke.mjs` drives the playground in headless Chromium.
+- **The docs and the package run as written.** [`tests/docs_examples.test.ts`](tests/docs_examples.test.ts) runs the README's fraud and reconciliation examples, compares every printed value, and compiles every TypeScript snippet under strict mode. `npm run build && npm run test:dist` loads the built package as CJS and ESM under plain Node, and `node e2e/smoke.mjs` drives the playground in headless Chromium and WebKit.
 
 ## Known limits
 
@@ -1269,12 +1269,12 @@ cannot tell them apart), Reset clears every cached key, and the console stays
 clean.
 
 ```bash
-# once — the browser binary is not in the repo. Run it from frontend/, which is
+# once — the browser binaries are not in the repo. Run it from frontend/, which is
 # where playwright is a devDependency: from the repo root `npx` would fetch a
 # different playwright version and download a browser this driver never uses.
 # The root install comes first: frontend/ links the SDK and runs its build.
 npm install
-(cd frontend && npm install && npx playwright install chromium)
+(cd frontend && npm install && npx playwright install chromium webkit)
 
 node e2e/smoke.mjs                # exit 0 = all pass, 1 = any failure
 ```
